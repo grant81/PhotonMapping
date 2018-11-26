@@ -117,91 +117,146 @@ struct Distribution1D {
  */
 namespace Warp {
 
+	inline v3f squareToUniformSphere(const p2f& sample) {
+		v3f v(0.f);
+		// TODO: Implement this
+		float wz = 1.f - 2.f * sample[0];
+		float r = sqrt(1.f - wz * wz);
+		float phi = 2 * M_PI *sample[1];
+		float wx = r * cos(phi);
+		float wy = r * sin(phi);
+		v = v3f(wx, wy, wz);
+		return v;
+	}
 
-inline v3f squareToUniformSphere(const p2f& sample) {
-    v3f v(0.f);
-    // TODO: Add previous assignment code (if needed)
-    return v;
-}
+	inline float squareToUniformSpherePdf() {
+		float pdf = 0.f;
+		// TODO: Implement this
+		pdf = INV_FOURPI;
+		return pdf;
+	}
 
-inline float squareToUniformSpherePdf() {
-    float pdf = 0.f;
-    // TODO: Add previous assignment code (if needed)
-    return pdf;
-}
+	inline v3f squareToUniformHemisphere(const p2f& sample) {
+		v3f v(0.f);
+		// TODO: Implement this
+		float wz = sample.x;
+		float r = sqrt(1.f - wz * wz);
+		float phi = 2 * M_PI *sample.y;
+		float wx = r * cos(phi);
+		float wy = r * sin(phi);
+		v = v3f(wx, wy, wz);
+		return v;
+	}
 
-inline v3f squareToUniformHemisphere(const p2f& sample) {
-    v3f v(0.f);
-    // TODO: Add previous assignment code (if needed)
-    return v;
-}
+	inline float squareToUniformHemispherePdf(const v3f& v) {
+		float pdf = 0.f;
+		// TODO: Implement this
+		pdf = INV_TWOPI;
+		return pdf;
+	}
 
-inline float squareToUniformHemispherePdf(const v3f& v) {
-    float pdf = 0.f;
-    // TODO: Add previous assignment code (if needed)
-    return pdf;
-}
+	inline v2f squareToUniformDiskConcentric(const p2f& sample) {
+		v2f v(0.f);
+		// TODO: Implement this (optional)
+		float phi, r, x, y;
+		float a = 2 * sample.x - 1.f;
+		float b = 2 * sample.y - 1.f;
+		if (a > -b) {
+			if (a > b) {
+				r = a;
+				phi = (M_PI / 4)*(b / a);
+			}
+			else {
+				r = b;
+				phi = (M_PI / 4)*(2 - (a / b));
+			}
+		}
+		else {
+			if (a < b) {
+				r = -a;
+				phi = (M_PI / 4)*(4 + b / a);
 
-inline v2f squareToUniformDiskConcentric(const p2f& sample) {
-    v2f v(0.f);
-    // TODO: Add previous assignment code (if needed)
-    return v;
-}
+			}
+			else {
+				r = -b;
+				if (b != 0) {
+					phi = (M_PI / 4)*(6 - (a / b));
+				}
+				else {
+					phi = 0;
+				}
+			}
+		}
+		x = r * cos(phi);
+		y = r * sin(phi);
+		v = v2f(x, y);
+		return v;
+	}
 
-inline v3f squareToCosineHemisphere(const p2f& sample) {
-    v3f v(0.f);
-    // TODO: Add previous assignment code (if needed)
-    return v;
-}
+	inline v3f squareToCosineHemisphere(const p2f& sample) {
+		v3f v(0.f);
+		// TODO: Implement this
+		v2f disk = squareToUniformDiskConcentric(sample);
+		float z = sqrt(1.f - disk[0] * disk[0] - disk[1] * disk[1]);
+		v = v3f(disk[0], disk[1], z);
+		return v;
+	}
 
-inline float squareToCosineHemispherePdf(const v3f& v) {
-    float pdf = 0.f;
-    // TODO: Add previous assignment code (if needed)
-    return pdf;
-}
+	inline float squareToCosineHemispherePdf(const v3f& v) {
+		float pdf = 0.f;
+		// TODO: Implement this
+		float cosTheta = v.z;
+		pdf = cosTheta * INV_PI;
+		return pdf;
+		return pdf;
+	}
 
-inline v3f squareToPhongLobe(const p2f& sample, float exponent) {
-    v3f v(0.f);
-    // TODO: Add previous assignment code (if needed)
-    return v;
-}
+	inline v3f squareToPhongLobe(const p2f& sample, const float exponent) {
+		v3f v(0.f);
 
-inline float squareToPhongLobePdf(const v3f& v, float exponent) {
-    float pdf = 0.f;
-    // TODO: Add previous assignment code (if needed)
-    return pdf;
-}
+		// TODO: Implement this
+		float theta = acos(pow((1 - sample.x), 1 / (exponent + 2)));
+		float phi = 2 * M_PI*sample.y;
+		float x = sin(theta)*cos(phi);
+		float y = sin(theta)*sin(phi);
+		float z = cos(theta);
+		v = v3f(x, y, z);
 
-inline v2f squareToUniformTriangle(const p2f& sample) {
-    v2f v(0.f);
-    float u = std::sqrt(1.f - sample.x);
-    v = {1 - u, u * sample.y};
-    return v;
-}
+		return v;
+	}
 
-inline v3f squareToUniformCone(const p2f& sample, float cosThetaMax) {
-    v3f v(0.f);
-    // TODO: Add previous assignment code (if needed)
-    return v;
-}
+	inline float squareToPhongLobePdf(const v3f& v, const float exponent) {
+		float pdf = 0.f;
+		// TODO: Implement this
+		pdf = (exponent + 2)*INV_TWOPI*pow(v.z, exponent);
+		return pdf;
+	}
 
-inline float squareToUniformConePdf(float cosThetaMax) {
-    float pdf = 0.f;
-    // TODO: Add previous assignment code (if needed)
-    return pdf;
-}
 
-inline p2f squareToUniformDisk(const p2f& sample) {
-    p2f p(0.f);
-    // TODO: Add previous assignment code (if needed)
-    return p;
-}
 
-inline float squareToUniformDiskPdf(const p2f& p) {
-    float pdf = 0.f;
-    // TODO: Add previous assignment code (if needed)
-    return pdf;
-}
+	inline v3f squareToUniformCone(const p2f& sample, float cosThetaMax) {
+		v3f v(0.f);
+		// TODO: Implement this
+		float cosTheta = (1.f - sample.x) + sample.x*cosThetaMax;
+		float sinTheta = glm::sqrt(1.f - cosTheta * cosTheta);
+		float phi = sample.y * 2 * M_PI;
+		v = v3f(glm::cos(phi)*sinTheta, glm::sin(phi)*sinTheta, cosTheta);
+		return v;
+	}
+
+	inline float squareToUniformConePdf(float cosThetaMax) {
+		float pdf = 0.f;
+		// TODO: Implement this
+		pdf = 1 * INV_TWOPI / (1 - cosThetaMax);
+		return pdf;
+	}
+
+	inline v2f squareToUniformTriangle(const p2f& sample) {
+		v2f v(0.f);
+		float u = std::sqrt(1.f - sample.x);
+		v = { 1 - u, u * sample.y };
+		return v;
+	}
 
 }
 

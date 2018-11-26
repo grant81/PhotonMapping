@@ -32,29 +32,39 @@ struct DiffuseBSDF : BSDF {
             combinedType |= components[i];
     }
 
-    v3f eval(const SurfaceInteraction& i) const override {
-        v3f val(0.f);
+	v3f eval(const SurfaceInteraction& i) const override {
+		v3f val(0.f);
+		// TODO: Implement this
 
-        // TODO: Add previous assignment code (if needed)
+		if (Frame::cosTheta(i.wi) < 0.f || Frame::cosTheta(i.wo) < 0.f) {
+			return val;
+		}
+		v3f alb = albedo->eval(worldData, i);
+		val = alb / M_PI * Frame::cosTheta(i.wi);
 
-        return val;
-    }
+		return val;
+	}
 
-    float pdf(const SurfaceInteraction& i) const override {
-        float pdf = 0.f;
+	float pdf(const SurfaceInteraction& i) const override {
+		float pdf = 0.f;
+		// TODO: Implement this
+		pdf = Warp::squareToCosineHemispherePdf(i.wi);
+		return pdf;
+	}
 
-        // TODO: Add previous assignment code (if needed)
-
-        return pdf;
-    }
-
-    v3f sample(SurfaceInteraction& i, const v2f& sample, float* pdf) const override {
-        v3f val(0.f);
-
-        // TODO: Add previous assignment code (if needed)
-
-        return val;
-    }
+	v3f sample(SurfaceInteraction& i, const v2f& sample, float* pdf) const override {
+		v3f val(0.f);
+		// TODO: Implement this
+		i.wi = Warp::squareToCosineHemisphere(sample);
+		float Pdf = Warp::squareToCosineHemispherePdf(i.wi);
+		*pdf = Pdf;
+		if (Pdf == 0) {
+			return val;
+		}
+		v3f brdf = eval(i);
+		val = brdf / Pdf;
+		return val;
+	}
 
     std::string toString() const override { return "Diffuse"; }
 };
