@@ -108,14 +108,17 @@ struct PPMIntegrator : Integrator {
 			size_t id = selectEmitter(sampler.next(), emPdf);
 			const Emitter& em = getEmitterByID(id);
 			float lightArea = em.area;
-			//initial energy
+			//initial photon from emitter
+			v3f n, pos, dir;
+			float pdfPos, pdfDir;
+			sampleEmitterPosition(sampler, em, n, pos, pdfPos);
+			sampleEmitterDirection(sampler, em, n, dir, pdfDir);
 			int emitterPhotonNum = (int)ceil(m_photonCount*lightArea / totalLightArea);
-			v3f energy = em.getPower()/emitterPhotonNum;
-			//TODO random sample on light to get dir and x, but how?
-			
+			v3f energy = em.getPower() /emitterPhotonNum/emPdf/pdfPos/pdfDir;
+			tracePhoton(sampler, pos, dir, n, energy, 0);
 		}
     }
-	void tracePhoton(Sampler& sampler, const v3f& pos, const v3f& dir, const v3f& energy, int bounces){
+	void tracePhoton(Sampler& sampler, const v3f& pos, const v3f& dir, const v3f& n, const v3f& energy, int bounces){
 		float rrProb = 1.f;
 		if (bounces >= m_photonRrDepth) {
 			if (sampler.next() >= m_photonRrProb) {
@@ -129,29 +132,28 @@ struct PPMIntegrator : Integrator {
 		Ray ray = Ray(pos, dir);
 		SurfaceInteraction hit;
 		if (scene.bvh->intersect(ray, hit)) {
-			float pdf;
 			v3f emission = getEmission(hit);
 			//if not hitting emitter
 			if (emission == v3f(0.f)) {//also determine whether surface is diffuse, but how?
-				//TODO how to get normal?
-				v3f normal(0.f);
+				v3f wiW = glm::normalize(pos - hit.p);
 				Photon p;
 				p.pos = hit.p;
-				p.dir = dir;
+				p.dir = wiW;
 				p.power = energy;
-				p.n = normal;
+				p.n = n;
 				//add the photon to the back of the list
 				//id = size of the list 
 				m_photonMap.push_back(p);
 				PhotonMapIdx curr = m_photonMap.size();
 				const PhotonKDTreeNode currNode = PhotonKDTreeNode(pos,curr-1);
 				m_KDTree.push_back(currNode);
-				
 				//recurse photon mapping
+				float pdf;
 				v3f BSDF = getBSDF(hit)->sample(hit, sampler.next2D(), &pdf);
-				v3f wi = glm::normalize(hit.frameNs.toWorld(hit.wi));
-				v3f power = energy * glm::abs(glm::dot(normal, wi))*BSDF / pdf;
-				tracePhoton(sampler, hit.p, wi, power, bounces + 1);
+				v3f normal = v3f(0.f);
+				//TODO how to get the normal of the hit
+				v3f power = energy * glm::abs(glm::dot(normal, wiW))*BSDF / pdf;
+				tracePhoton(sampler, hit.p, wiW, power, normal,bounces + 1);
 				
 				//select direction
 
