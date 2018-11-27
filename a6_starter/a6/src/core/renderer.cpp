@@ -23,6 +23,7 @@
 #endif
 #endif
 
+
 #include <bsdfs/diffuse.h>
 
 #include <integrators/normal.h>
@@ -107,23 +108,48 @@ bool Renderer::init(const bool isRealTime, bool nogui) {
 }
 
 void Renderer::render() {
-    if (realTime) {
-        /**
-         * 1) Detect and handle the quit event.
-         * 2) Call the render function using renderpass->render().
-         * 3) Output the rendered image into the GUI window using SDL_GL_SwapWindow(renderpass->window).
-         */
-        // TODO: Add previous assignment code (if needed)
-    } else {
-        /**
-         * 1) Calculate the camera perspective, the camera-to-world transformation matrix and the aspect ratio.
-         * 2) Clear integral RGB buffer.
-         * 3) Loop over all pixels on the image plane.
-         * 4) Generate a ray through each pixel center.
-         * 5) Splat their contribution onto the image plane.
-         */
-        // TODO: Add previous assignment code (if needed)
-    }
+	if (realTime) {
+		SDL_Event event;
+
+		while (1) {
+			SDL_PollEvent(&event);
+			if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+				break;
+			}
+			renderpass->updateCamera(event);
+			renderpass->render();
+			SDL_GL_SwapWindow(renderpass->window);
+		}
+	}
+	else {
+		int spp = scene.config.spp;
+		v3f colour(0.f);
+		Sampler *sampler = new Sampler(263493);
+		Sampler sample = *sampler;
+		double aspect_ratio = (double)scene.config.height / (double)scene.config.width;
+		double scaling = (double)tan(deg2rad * (scene.config.camera.fov) / 2.0);
+		glm::mat4 viewMatrix = (glm::lookAt(scene.config.camera.o, scene.config.camera.at, scene.config.camera.up));
+		integrator->rgb->clear();
+		for (int i = 0; i < scene.config.width; i++) {
+			for (int j = 0; j < scene.config.height; j++) {
+				colour = v3f(0.f);
+				for (int u = 0; u < spp; u++) {
+					double pixel_x = (2 * ((i + sample.next()) / scene.config.width) - 1)*scaling / aspect_ratio;
+					double pixel_y = (1 - (2 * (j + sample.next()) / scene.config.height))*scaling;
+					v4f viewingPixelWorldSpace = v4f(pixel_x, pixel_y, -1.0, 0); //-1  because we are looking at the -1 direction.
+					v3f direction = v3f(viewingPixelWorldSpace * viewMatrix);
+					direction = normalize(direction); //normalize
+					Ray ray = Ray(scene.config.camera.o, direction);
+					colour += integrator->render(ray, *sampler);
+
+				}
+
+				integrator->rgb->data[i + scene.config.width*j] = colour / spp;
+			}
+		}
+
+
+	}
 }
 
 /**

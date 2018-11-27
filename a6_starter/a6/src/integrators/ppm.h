@@ -117,8 +117,10 @@ struct PPMIntegrator : Integrator {
 			v3f energy = em.getPower() /emitterPhotonNum/emPdf/pdfPos/pdfDir;
 			tracePhoton(sampler, pos, dir, n, energy, 0);
 		}
+		m_KDTree.build();
     }
 	void tracePhoton(Sampler& sampler, const v3f& pos, const v3f& dir, const v3f& n, const v3f& energy, int bounces){
+		
 		float rrProb = 1.f;
 		if (bounces >= m_photonRrDepth) {
 			if (sampler.next() >= m_photonRrProb) {
@@ -147,6 +149,7 @@ struct PPMIntegrator : Integrator {
 				PhotonMapIdx curr = m_photonMap.size();
 				const PhotonKDTreeNode currNode = PhotonKDTreeNode(pos,curr-1);
 				m_KDTree.push_back(currNode);
+				
 				//recurse photon mapping
 				float pdf;
 				v3f BSDF = getBSDF(hit)->sample(hit, sampler.next2D(), &pdf);
@@ -165,6 +168,23 @@ struct PPMIntegrator : Integrator {
 	}
     v3f render(const Ray& ray, Sampler& sampler) const override {
         v3f throughput(0.f);
+		//get Kd
+		SurfaceInteraction hit;
+		//shoot ray into scene.
+		std::vector<unsigned int> results;
+		if (scene.bvh->intersect(ray, hit)) {
+			const BSDF * bsdf = getBSDF(hit);
+			v3f eval_bsdf = bsdf->eval;
+			m_KDTree.search(hit.p, m_radiusSearch,  results); //might have to use nnSearch
+			for (int i = 0; i < results.size; i++) {//for all the nearest neighbors
+				Photon p = m_photonMap[results[0]]; //still need to do the photon normal check
+				float radius2 = glm::distance2(p.pos, hit.p);
+				throughput += eval_bsdf * p.power*INV_PI / (radius2);
+			}
+		
+		}
+		
+
         // TODO: Implement this
 
         return throughput;
