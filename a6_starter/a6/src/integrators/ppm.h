@@ -77,7 +77,7 @@ struct PPMIntegrator : Integrator {
 
         std::cout << "Start emitting photons. " << std::endl;
         generatePhotonMap();
-
+		printf("first bounce hit:%d", firstBH);
         return true;
     }
 
@@ -113,13 +113,25 @@ struct PPMIntegrator : Integrator {
 			float pdfPos, pdfDir;
 			sampleEmitterPosition(sampler, em, n, pos, pdfPos);
 			sampleEmitterDirection(sampler, em, n, dir, pdfDir);
+			/*//using hemishphere area sampling
+
+			v3f emCenter = scene.getShapeCenter(em.shapeID);
+			float emitterRadius = scene.getShapeRadius(em.shapeID);
+			v3f ne = Warp::squareToUniformSphere(sampler.next2D());
+			pdfPos = INV_FOURPI / pow(emitterRadius, 2);
+			v3f samplePoint = ne * emitterRadius;
+			pos = samplePoint + emitterRadius;
+			n = glm::normalize(pos);
+			sampleEmitterDirection(sampler, em, n, dir, pdfDir);*/
+
 			int emitterPhotonNum = (int)ceil(m_photonCount*lightArea / totalLightArea);
 			v3f energy = em.getPower() /emitterPhotonNum/emPdf/pdfPos/pdfDir;
-			tracePhoton(sampler, pos, dir, n, energy, 0);
+			tracePhoton(sampler, pos, dir, energy, 0);
 		}
 		m_KDTree.build();
     }
-	void tracePhoton(Sampler& sampler, const v3f& pos, const v3f& dir, const v3f& n, const v3f& energy, int bounces){
+	int firstBH = 0;
+	void tracePhoton(Sampler& sampler, const v3f& pos, const v3f& dir, const v3f& energy, int bounces){
 		
 		float rrProb = 1.f;
 		if (bounces >= m_photonRrDepth) {
@@ -134,33 +146,37 @@ struct PPMIntegrator : Integrator {
 		Ray ray = Ray(pos, dir);
 		SurfaceInteraction hit;
 		if (scene.bvh->intersect(ray, hit)) {
+			if (bounces == 0) {
+				firstBH += 1;
+			}
 			v3f emission = getEmission(hit);
 			//if not hitting emitter
 			if (emission == v3f(0.f)) {//also determine whether surface is diffuse, but how?
-				v3f wiW = glm::normalize(pos - hit.p);
+				v3f wiW = glm::normalize(pos - hit.p);//light pos - hit pos
 				Photon p;
 				v3f normal = hit.frameNs.n;
 				p.pos = hit.p;
-				p.dir = wiW;
-				p.power = energy * glm::abs(glm::dot(n, wiW))*getBSDF(hit)->eval(hit) / rrProb;
+				p.dir = dir;
+				p.power = energy;
 				p.n = normal;
 				//add the photon to the back of the list
 				//id = size of the list 
 				m_photonMap.push_back(p);
 				PhotonMapIdx curr = m_photonMap.size();
 				const PhotonKDTreeNode currNode = PhotonKDTreeNode(pos,curr-1);
-				m_KDTree.push_back(currNode);
-				
+				m_KDTree.push_back(currNode);	
 				//recurse photon mapping
+				hit.wi = hit.frameNs.toLocal(wiW);
 				float pdf;
 				getBSDF(hit)->sample(hit, sampler.next2D(), &pdf);
 				v3f wiW2 = glm::normalize(hit.frameNs.toWorld(hit.wi));
+				hit.wo = hit.wi;
+				hit.wi = hit.frameNs.toLocal(wiW);
+				v3f bsdf = getBSDF(hit)->eval(hit);	
 				//TODO how to get the normal of the hit
-				//v3f power = energy * glm::abs(glm::dot(normal, wiW))*BSDF /rrProb/ pdf;
-				tracePhoton(sampler, hit.p, wiW2, p.power, normal,bounces + 1);
-				
+				v3f power = energy * glm::abs(glm::dot(normal, wiW2)) *bsdf/rrProb/ pdf;
+				tracePhoton(sampler, hit.p, wiW2, power, bounces + 1);				
 				//select direction
-
 			}
 			
 			
@@ -174,18 +190,35 @@ struct PPMIntegrator : Integrator {
 		//shoot ray into scene.
 		
 		if (scene.bvh->intersect(ray, hit)) {
-			
+			v3f emission = getEmission(hit);
+			if (emission != v3f(0.f)) {
+				return emission;
+			}
 			PointKDTree<PhotonKDTreeNode>::SearchResult results[501];
-			const BSDF * bsdf = getBSDF(hit);
-			v3f eval_bsdf = bsdf->eval(hit);
+			
 			float searchRadiusSqr = m_radiusSearch * m_radiusSearch;
-			//m_KDTree.nnSearch(hit.p, searchRadiusSqr, m_nbPhotonsSearch, results);
-			m_KDTree.nnSearch(hit.p,(size_t)m_nbPhotonsSearch,results);
-			//m_KDTree.search(hit.p, m_radiusSearch, results); //might have to use nnSearch
+			m_KDTree.nnSearch(hit.p, searchRadiusSqr, m_nbPhotonsSearch, results);
+			
 			for (int i = 0; i <m_nbPhotonsSearch; i++) {//for all the nearest neighbors
-				Photon p = m_photonMap[results[i].index]; //still need to do the photon normal check
-				float radius2 = glm::distance2(p.pos, hit.p);
-				throughput += eval_bsdf * p.power*INV_PI / (radius2);
+				int index = results[i].index;
+				if (index < m_photonMap.size()) {
+					Photon p = m_photonMap[index]; //TODO  the photon normal check
+					if (glm::abs(glm::dot(hit.frameNs.n, p.n))- 1< 0.1) {
+						hit.wo = -hit.wi;
+						hit.wi = hit.frameNs.toLocal(p.dir);
+						//hit.frameNs.n = p.n;
+						v3f eval_bsdf = getBSDF(hit)->eval(hit);
+						//eval_bsdf = v3f(1.f);
+						//float radius2 = glm::distance2(p.pos, hit.p);
+						float radius2 = searchRadiusSqr;
+						//v3f lum = v3f(p.power.x*0.299,p.power.y*0.587,p.power.z*0.114)*10000;
+						//v3f lum = v3f(p.power.x*0.333, p.power.y*0.333, p.power.z*0.333);
+						throughput += eval_bsdf * p.power*INV_PI / (radius2);
+					}
+					
+				}
+				
+				//throughput = v3f(1.f);
 			}
 		
 		}
