@@ -1,8 +1,8 @@
-/*
-    This file is part of TinyRender, an educative rendering system.
 
-    Designed for ECSE 446/546 Realistic/Advanced Image Synthesis.
-    Derek Nowrouzezahrai, McGill University.
+/*
+	This file is part of TinyRender, an educative rendering system.
+	Designed for ECSE 446/546 Realistic/Advanced Image Synthesis.
+	Derek Nowrouzezahrai, McGill University.
 */
 
 #pragma once
@@ -18,10 +18,10 @@ TR_NAMESPACE_BEGIN
  * size is 28 bytes
 */
 typedef struct Photon {
-    v3f pos;                  // photon position
-    v3f dir;      // incoming direction
-    v3f power;   // photon power (uncompressed)
-    v3f n;
+	v3f pos;                  // photon position
+	v3f dir;      // incoming direction
+	v3f power;   // photon power (uncompressed)
+	v3f n;
 } Photon;
 
 
@@ -30,63 +30,63 @@ typedef struct Photon {
  */
 struct PPMIntegrator : Integrator {
 
-    std::vector<Photon> m_photonMap;
+	std::vector<Photon> m_photonMap;
 
-    typedef unsigned int PhotonMapIdx;
-    typedef GenericKDTreeNode<v3f, PhotonMapIdx> PhotonKDTreeNode;
-    PointKDTree<PhotonKDTreeNode> m_KDTree;
-	
-    //1st pass
-    int m_photonCount;
-    float m_photonRrProb;
-    int m_photonRrDepth;
+	typedef unsigned int PhotonMapIdx;
+	typedef GenericKDTreeNode<v3f, PhotonMapIdx> PhotonKDTreeNode;
+	PointKDTree<PhotonKDTreeNode> m_KDTree;
 
-    //2nd pass
-    int m_emittedPhotonCount;
-    bool m_usePhotonsForDirect;
-    float m_radiusSearch;
-    int m_nbPhotonsSearch;
-    bool m_useFinalGather;
-    int m_nbFinalGather;
+	//1st pass
+	int m_photonCount;
+	float m_photonRrProb;
+	int m_photonRrDepth;
 
-    std::unique_ptr<DirectIntegrator> m_directIntegrator;
+	//2nd pass
+	int m_emittedPhotonCount;
+	bool m_usePhotonsForDirect;
+	float m_radiusSearch;
+	int m_nbPhotonsSearch;
+	bool m_useFinalGather;
+	int m_nbFinalGather;
 
-    explicit PPMIntegrator(const Scene& scene) : Integrator(scene)
-    {
-        m_directIntegrator = std::unique_ptr<DirectIntegrator>(new DirectIntegrator(scene));
+	std::unique_ptr<DirectIntegrator> m_directIntegrator;
 
-        m_directIntegrator->m_emitterSamples = scene.config.integratorSettings.pm.emitterSamplesCount;
-        m_directIntegrator->m_bsdfSamples = scene.config.integratorSettings.pm.emitterSamplesCount;
-        m_directIntegrator->m_samplingStrategy = "mis";
+	explicit PPMIntegrator(const Scene& scene) : Integrator(scene)
+	{
+		m_directIntegrator = std::unique_ptr<DirectIntegrator>(new DirectIntegrator(scene));
 
-        //1st pass
-        m_photonCount = scene.config.integratorSettings.pm.photonCount;
-        m_photonRrDepth = scene.config.integratorSettings.pm.photonRrDepth;
-        m_photonRrProb = scene.config.integratorSettings.pm.photonRrProb;
+		m_directIntegrator->m_emitterSamples = scene.config.integratorSettings.pm.emitterSamplesCount;
+		m_directIntegrator->m_bsdfSamples = scene.config.integratorSettings.pm.emitterSamplesCount;
+		m_directIntegrator->m_samplingStrategy = "mis";
 
-        //2nd pass
-        m_radiusSearch = scene.config.integratorSettings.pm.searchRadius;
-        m_nbPhotonsSearch = scene.config.integratorSettings.pm.photonsSearchCount;
-        m_useFinalGather = scene.config.integratorSettings.pm.useFinalGather;
-        m_nbFinalGather = scene.config.integratorSettings.pm.finalGatherSamplesCount;
-        m_usePhotonsForDirect = scene.config.integratorSettings.pm.usePhotonsForDirect;
-    }
+		//1st pass
+		m_photonCount = scene.config.integratorSettings.pm.photonCount;
+		m_photonRrDepth = scene.config.integratorSettings.pm.photonRrDepth;
+		m_photonRrProb = scene.config.integratorSettings.pm.photonRrProb;
 
-    bool init() override {
-        Integrator::init();
+		//2nd pass
+		m_radiusSearch = scene.config.integratorSettings.pm.searchRadius;
+		m_nbPhotonsSearch = scene.config.integratorSettings.pm.photonsSearchCount;
+		m_useFinalGather = scene.config.integratorSettings.pm.useFinalGather;
+		m_nbFinalGather = scene.config.integratorSettings.pm.finalGatherSamplesCount;
+		m_usePhotonsForDirect = scene.config.integratorSettings.pm.usePhotonsForDirect;
+	}
 
-        std::cout << "Start emitting photons. " << std::endl;
-        generatePhotonMap();
+	bool init() override {
+		Integrator::init();
+
+		std::cout << "Start emitting photons. " << std::endl;
+		generatePhotonMap();
 		printf("first bounce hit:%d", firstBH);
-        return true;
-    }
+		return true;
+	}
 
-    void generatePhotonMap() {
-        // TODO: Implement this
+	void generatePhotonMap() {
+		// TODO: Implement this
 		float totalLightArea = 0.f;
 		Sampler sampler = Sampler(260563769);
-		
-		for (unsigned int i = 0; i < scene.emitters.size();i++) {
+
+		for (unsigned int i = 0; i < scene.emitters.size(); i++) {
 			const Emitter& em = scene.emitters[i];
 			totalLightArea += em.area;
 		}
@@ -98,7 +98,6 @@ struct PPMIntegrator : Integrator {
 			//initial energy
 			v3f energy = lightArea / double(emitterPhotonNum)*em.getPower();
 			for (int j = 0; j <= emitterPhotonNum; j++) {
-
 			}
 		}
 		*/
@@ -114,7 +113,6 @@ struct PPMIntegrator : Integrator {
 			sampleEmitterPosition(sampler, em, n, pos, pdfPos);
 			sampleEmitterDirection(sampler, em, n, dir, pdfDir);
 			/*//using hemishphere area sampling
-
 			v3f emCenter = scene.getShapeCenter(em.shapeID);
 			float emitterRadius = scene.getShapeRadius(em.shapeID);
 			v3f ne = Warp::squareToUniformSphere(sampler.next2D());
@@ -125,14 +123,14 @@ struct PPMIntegrator : Integrator {
 			sampleEmitterDirection(sampler, em, n, dir, pdfDir);*/
 
 			int emitterPhotonNum = (int)ceil(m_photonCount*lightArea / totalLightArea);
-			v3f energy = em.getPower() /emitterPhotonNum/emPdf/pdfPos/pdfDir;
+			v3f energy = em.getPower() / emitterPhotonNum / emPdf / pdfPos / pdfDir;
 			tracePhoton(sampler, pos, dir, energy, 0);
 		}
 		m_KDTree.build();
-    }
+	}
 	int firstBH = 0;
-	void tracePhoton(Sampler& sampler, const v3f& pos, const v3f& dir, const v3f& energy, int bounces){
-		
+	void tracePhoton(Sampler& sampler, const v3f& pos, const v3f& dir, const v3f& energy, int bounces) {
+
 		float rrProb = 1.f;
 		if (bounces >= m_photonRrDepth) {
 			if (sampler.next() >= m_photonRrProb) {
@@ -163,8 +161,8 @@ struct PPMIntegrator : Integrator {
 				//id = size of the list 
 				m_photonMap.push_back(p);
 				PhotonMapIdx curr = m_photonMap.size();
-				const PhotonKDTreeNode currNode = PhotonKDTreeNode(pos,curr-1);
-				m_KDTree.push_back(currNode);	
+				const PhotonKDTreeNode currNode = PhotonKDTreeNode(pos, curr - 1);
+				m_KDTree.push_back(currNode);
 				//recurse photon mapping
 				hit.wi = hit.frameNs.toLocal(wiW);
 				float pdf;
@@ -172,62 +170,63 @@ struct PPMIntegrator : Integrator {
 				v3f wiW2 = glm::normalize(hit.frameNs.toWorld(hit.wi));
 				hit.wo = hit.wi;
 				hit.wi = hit.frameNs.toLocal(wiW);
-				v3f bsdf = getBSDF(hit)->eval(hit);	
+				v3f bsdf = getBSDF(hit)->eval(hit);
 				//TODO how to get the normal of the hit
-				v3f power = energy * glm::abs(glm::dot(normal, wiW2)) *bsdf/rrProb/ pdf;
-				tracePhoton(sampler, hit.p, wiW2, power, bounces + 1);				
+				v3f power = energy * glm::abs(glm::dot(normal, wiW2)) *bsdf / rrProb / pdf;
+				tracePhoton(sampler, hit.p, wiW2, power, bounces + 1);
 				//select direction
 			}
-			
-			
+
+
 			//create a new photon
 		}
 	}
-    v3f render(const Ray& ray, Sampler& sampler) const override {
-        v3f throughput(0.f);
+	v3f render(const Ray& ray, Sampler& sampler) const override {
+		v3f throughput(0.f);
 		//get Kd
 		SurfaceInteraction hit;
 		//shoot ray into scene.
-		
+
 		if (scene.bvh->intersect(ray, hit)) {
 			v3f emission = getEmission(hit);
 			if (emission != v3f(0.f)) {
 				return emission;
 			}
 			PointKDTree<PhotonKDTreeNode>::SearchResult results[501];
-			
-			float searchRadiusSqr = m_radiusSearch * m_radiusSearch;
-			m_KDTree.nnSearch(hit.p, searchRadiusSqr, m_nbPhotonsSearch, results);
-			
-			for (int i = 0; i <m_nbPhotonsSearch; i++) {//for all the nearest neighbors
+
+			float searchr =  m_radiusSearch;
+			m_KDTree.nnSearch(hit.p, searchr, m_nbPhotonsSearch, results);
+
+			for (int i = 0; i < m_nbPhotonsSearch; i++) {//for all the nearest neighbors
 				int index = results[i].index;
 				if (index < m_photonMap.size()) {
 					Photon p = m_photonMap[index]; //TODO  the photon normal check
-					if (glm::abs(glm::dot(hit.frameNs.n, p.n))- 1< 0.1) {
+					if (glm::abs(glm::dot(hit.frameNs.n, p.n)) - 1 < 0.1) {
 						hit.wo = -hit.wi;
 						hit.wi = hit.frameNs.toLocal(p.dir);
 						//hit.frameNs.n = p.n;
 						v3f eval_bsdf = getBSDF(hit)->eval(hit);
 						//eval_bsdf = v3f(1.f);
 						//float radius2 = glm::distance2(p.pos, hit.p);
-						float radius2 = searchRadiusSqr;
+						float radius2 = m_radiusSearch * m_radiusSearch;
 						//v3f lum = v3f(p.power.x*0.299,p.power.y*0.587,p.power.z*0.114)*10000;
 						//v3f lum = v3f(p.power.x*0.333, p.power.y*0.333, p.power.z*0.333);
 						throughput += eval_bsdf * p.power*INV_PI / (radius2);
 					}
-					
+
 				}
-				
+
 				//throughput = v3f(1.f);
 			}
-		
+
 		}
-		
 
-        // TODO: Implement this
 
-        return throughput;
-    }
+		// TODO: Implement this
+
+		return throughput;
+	}
 };
 
 TR_NAMESPACE_END
+
