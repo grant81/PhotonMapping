@@ -192,6 +192,9 @@ struct PPMIntegrator : Integrator {
 			if (emission != v3f(0.f)) {
 				return emission;
 			}
+			//hit.wo = -hit.wi;
+						
+			const double num = m_nbPhotonsSearch;
 			PointKDTree<PhotonKDTreeNode>::SearchResult results[501];
 
 			float searchr =  m_radiusSearch;
@@ -201,8 +204,7 @@ struct PPMIntegrator : Integrator {
 				int index = results[i].index;
 				if (index < m_photonMap.size()) {
 					Photon p = m_photonMap[index]; //TODO  the photon normal check
-					if (glm::abs(glm::dot(hit.frameNs.n, p.n)) - 1 < 0.1) {
-						hit.wo = -hit.wi;
+					if (glm::abs(glm::dot(normalize(hit.frameNs.n), normalize(p.n))) -1 < 0.1) {
 						hit.wi = hit.frameNs.toLocal(p.dir);
 						//hit.frameNs.n = p.n;
 						v3f eval_bsdf = getBSDF(hit)->eval(hit);
