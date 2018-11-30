@@ -112,18 +112,8 @@ struct PPMIntegrator : Integrator {
 			float pdfPos, pdfDir;
 			sampleEmitterPosition(sampler, em, n, pos, pdfPos);
 			sampleEmitterDirection(sampler, em, n, dir, pdfDir);
-			/*//using hemishphere area sampling
-			v3f emCenter = scene.getShapeCenter(em.shapeID);
-			float emitterRadius = scene.getShapeRadius(em.shapeID);
-			v3f ne = Warp::squareToUniformSphere(sampler.next2D());
-			pdfPos = INV_FOURPI / pow(emitterRadius, 2);
-			v3f samplePoint = ne * emitterRadius;
-			pos = samplePoint + emitterRadius;
-			n = glm::normalize(pos);
-			sampleEmitterDirection(sampler, em, n, dir, pdfDir);*/
-
 			int emitterPhotonNum = (int)ceil(m_photonCount*lightArea / totalLightArea);
-			v3f energy = em.getPower() / emitterPhotonNum / emPdf / pdfPos / pdfDir;
+			v3f energy = em.getPower() / emitterPhotonNum;
 			tracePhoton(sampler, pos, dir, energy, 0);
 		}
 		m_KDTree.build();
@@ -137,6 +127,7 @@ struct PPMIntegrator : Integrator {
 				return;
 			}
 			else {
+				//return;
 				rrProb = m_photonRrProb;
 			}
 		}
@@ -192,12 +183,12 @@ struct PPMIntegrator : Integrator {
 			if (emission != v3f(0.f)) {
 				return emission;
 			}
-			//hit.wo = -hit.wi;
+			
 						
 			const double num = m_nbPhotonsSearch;
 			PointKDTree<PhotonKDTreeNode>::SearchResult results[501];
 
-			float searchr =  m_radiusSearch;
+			float searchr =  m_radiusSearch* m_radiusSearch;
 			m_KDTree.nnSearch(hit.p, searchr, m_nbPhotonsSearch, results);
 
 			for (int i = 0; i < m_nbPhotonsSearch; i++) {//for all the nearest neighbors
@@ -205,14 +196,14 @@ struct PPMIntegrator : Integrator {
 				if (index < m_photonMap.size()) {
 					Photon p = m_photonMap[index]; //TODO  the photon normal check
 					if (glm::abs(glm::dot(normalize(hit.frameNs.n), normalize(p.n))) -1 < 0.1) {
+						hit.wo = -hit.wi;
 						hit.wi = hit.frameNs.toLocal(p.dir);
 						//hit.frameNs.n = p.n;
 						v3f eval_bsdf = getBSDF(hit)->eval(hit);
 						//eval_bsdf = v3f(1.f);
 						//float radius2 = glm::distance2(p.pos, hit.p);
 						float radius2 = m_radiusSearch * m_radiusSearch;
-						//v3f lum = v3f(p.power.x*0.299,p.power.y*0.587,p.power.z*0.114)*10000;
-						//v3f lum = v3f(p.power.x*0.333, p.power.y*0.333, p.power.z*0.333);
+		
 						throughput += eval_bsdf * p.power*INV_PI / (radius2);
 					}
 
