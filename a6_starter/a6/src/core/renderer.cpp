@@ -109,42 +109,69 @@ bool Renderer::init(const bool isRealTime, bool nogui) {
 
 void Renderer::render() {
 	if (realTime) {
-		SDL_Event event;
-
-		while (1) {
-			SDL_PollEvent(&event);
-			if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+		/**
+		 * Your real-time rendering loop solution from A1 here.
+		 */
+		SDL_Event e;
+		for (;;) {
+			SDL_PollEvent(&e);
+			if (e.type == SDL_QUIT) {
+				SDL_Log("Program quit after %i ticks", e.quit.timestamp);
 				break;
 			}
-			renderpass->updateCamera(event);
+			renderpass->updateCamera(e);
 			renderpass->render();
 			SDL_GL_SwapWindow(renderpass->window);
 		}
 	}
 	else {
-		int spp = scene.config.spp;
-		v3f colour(0.f);
-		Sampler *sampler = new Sampler(263493);
-		Sampler sample = *sampler;
-		double aspect_ratio = (double)scene.config.height / (double)scene.config.width;
-		double scaling = (double)tan(deg2rad * (scene.config.camera.fov) / 2.0);
-		glm::mat4 viewMatrix = (glm::lookAt(scene.config.camera.o, scene.config.camera.at, scene.config.camera.up));
-		integrator->rgb->clear();
-		for (int i = 0; i < scene.config.width; i++) {
-			for (int j = 0; j < scene.config.height; j++) {
-				colour = v3f(0.f);
-				for (int u = 0; u < spp; u++) {
-					double pixel_x = (2 * ((i + sample.next()) / scene.config.width) - 1)*scaling / aspect_ratio;
-					double pixel_y = (1 - (2 * (j + sample.next()) / scene.config.height))*scaling;
-					v4f viewingPixelWorldSpace = v4f(pixel_x, pixel_y, -1.0, 0); //-1  because we are looking at the -1 direction.
-					v3f direction = v3f(viewingPixelWorldSpace * viewMatrix);
-					direction = normalize(direction); //normalize
-					Ray ray = Ray(scene.config.camera.o, direction);
-					colour += integrator->render(ray, *sampler);
+		int width = scene.config.width;
+		int height = scene.config.height;
+		int sampleNum = scene.config.spp;
 
+		Sampler sampler = Sampler(260563769);
+		v3f o = scene.config.camera.o;
+		//1
+		float cameraPerspective = scene.config.camera.fov;
+		glm::mat4 inverseView = glm::lookAt(o, scene.config.camera.at, scene.config.camera.up);
+		float aspectRatio = (float)width / (float)height;
+		float scaling = tan((scene.config.camera.fov*deg2rad) / 2.f);
+		//2
+		integrator->rgb->clear();
+
+		for (int x = 0; x < width; ++x) {
+			for (int y = 0; y < height; ++y) {
+				v3f colorSum = v3f(0.f, 0.f, 0.f);
+				if (sampleNum == 1) {
+					float xNDC = (x + 0.5) / width;
+					float yNDC = (y + 0.5) / height;
+					float xScreen = 2 * xNDC - 1;
+					float yScreen = 1 - 2 * yNDC;
+					float xCamera = xScreen * aspectRatio*scaling;
+					float yCamera = yScreen * scaling;
+					v4f P = v4f(xCamera, yCamera, -1.f, 1.f);
+					v4f pWorld = P * inverseView;
+					//v4f eyeTransformed = v4f(o[0],o[1],o[2],1.f)*inverseView;
+					Ray ray = Ray(o, v3f(pWorld));
+					v3f color = integrator->render(ray, sampler);
+					integrator->rgb->data[y*width + x] = color;
+				}
+				else {
+					for (int z = 0; z < sampleNum; z++) {
+						float xNDC = (x + sampler.next()) / width;
+						float yNDC = (y + sampler.next()) / height;
+						float xScreen = 2 * xNDC - 1;
+						float yScreen = 1 - 2 * yNDC;
+						float xCamera = xScreen * aspectRatio*scaling;
+						float yCamera = yScreen * scaling;
+						v4f P = v4f(xCamera, yCamera, -1.f, 1.f);
+						v4f pWorld = P * inverseView;
+						Ray ray = Ray(o, v3f(pWorld));
+						colorSum += integrator->render(ray, sampler);
+					}
+					integrator->rgb->data[y*width + x] = colorSum / sampleNum;
 				}
 
-				integrator->rgb->data[i + scene.config.width*j] = colour / spp;
 			}
 		}
 
