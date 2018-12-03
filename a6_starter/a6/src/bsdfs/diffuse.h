@@ -1,6 +1,5 @@
 /*
     This file is part of TinyRender, an educative rendering system.
-
     Designed for ECSE 446/546 Realistic/Advanced Image Synthesis.
     Derek Nowrouzezahrai, McGill University.
 */
@@ -32,39 +31,41 @@ struct DiffuseBSDF : BSDF {
             combinedType |= components[i];
     }
 
-	v3f eval(const SurfaceInteraction& i) const override {
+    v3f eval(const SurfaceInteraction& i) const override {
 		v3f val(0.f);
-		// TODO: Implement this
+		// TODO: Add previous assignment code (if needed)
+		v3f rho = albedo->eval(worldData, i);
+		v3f wo = i.wo;
+		v3f wi = i.wi;
+		float z_in = Frame::cosTheta(wi);
+		float z_out = Frame::cosTheta(wo);
 
-		if (Frame::cosTheta(i.wi) < 0.f || Frame::cosTheta(i.wo) < 0.f) {
-			return val;
-		}
-		v3f alb = albedo->eval(worldData, i);
-		val = alb / M_PI * Frame::cosTheta(i.wi);
-
+		if (z_in > 0 && z_out > 0) //check correct direction				
+			val = rho / M_PI;
 		return val;
-	}
+    }
 
-	float pdf(const SurfaceInteraction& i) const override {
-		float pdf = 0.f;
+    float pdf(const SurfaceInteraction& i) const override {
 		// TODO: Implement this
-		pdf = Warp::squareToCosineHemispherePdf(i.wi);
+		float pdf = Warp::squareToCosineHemispherePdf(i.wi);
 		return pdf;
-	}
+    }
 
-	v3f sample(SurfaceInteraction& i, const v2f& sample, float* pdf) const override {
+    v3f sample(SurfaceInteraction& i, const v2f& sample, float* pdf_p) const override {
 		v3f val(0.f);
-		// TODO: Implement this
 		i.wi = Warp::squareToCosineHemisphere(sample);
-		float Pdf = Warp::squareToCosineHemispherePdf(i.wi);
-		*pdf = Pdf;
-		if (Pdf == 0) {
-			return val;
-		}
-		v3f brdf = eval(i);
-		val = brdf / Pdf;
+
+		float pdf_val = pdf(i);
+		*pdf_p = pdf_val;
+
+		v3f brdf_factor = eval(i);
+
+		if (pdf_val > 0.f)
+			val = brdf_factor / pdf_val;
+		else
+			val = v3f(0);
 		return val;
-	}
+    }
 
     std::string toString() const override { return "Diffuse"; }
 };

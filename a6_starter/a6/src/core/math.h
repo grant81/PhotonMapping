@@ -197,8 +197,8 @@ namespace Warp {
 		v3f v(0.f);
 		// TODO: Implement this
 		v2f disk = squareToUniformDiskConcentric(sample);
-		float z = sqrt(1.f - disk[0] * disk[0] - disk[1] * disk[1]);
-		v = v3f(disk[0], disk[1], z);
+		float z = sqrt(1.f - disk.x * disk.x - disk.y*disk.y);
+		v = v3f(disk.x, disk.y, z);
 		return v;
 	}
 
@@ -207,7 +207,6 @@ namespace Warp {
 		// TODO: Implement this
 		float cosTheta = v.z;
 		pdf = cosTheta * INV_PI;
-		return pdf;
 		return pdf;
 	}
 
