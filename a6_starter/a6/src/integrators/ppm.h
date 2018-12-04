@@ -70,6 +70,7 @@ struct PPMIntegrator : Integrator {
 		m_useFinalGather = scene.config.integratorSettings.pm.useFinalGather;
 		m_nbFinalGather = scene.config.integratorSettings.pm.finalGatherSamplesCount;
 		m_usePhotonsForDirect = scene.config.integratorSettings.pm.usePhotonsForDirect;
+		
 	}
 
 	bool init() override {
@@ -104,7 +105,8 @@ struct PPMIntegrator : Integrator {
 		*/
 		//randomly select light
 		int emittedPhotons = 0;
-
+		m_photonMap.reserve(m_photonCount);
+		m_KDTree.reserve(m_photonCount);
 		while (!haveEnoughPhotons) {
 			float emPdf;
 			size_t id = selectEmitter(sampler.next(), emPdf);
@@ -189,8 +191,15 @@ struct PPMIntegrator : Integrator {
 				v3f power = energy * brdf* glm::abs(glm::dot(normal, normalize(wiW2))) / rrProb;
 				PhotonMapIdx curr = m_photonMap.size();
 				const PhotonKDTreeNode currNode = PhotonKDTreeNode(p.pos, curr);
-				m_photonMap.push_back(p);
-				m_KDTree.push_back(currNode);
+				if (m_usePhotonsForDirect) {
+					m_photonMap.push_back(p);
+					m_KDTree.push_back(currNode);
+				}
+				else if(bounces > 0) {
+					m_photonMap.push_back(p);
+					m_KDTree.push_back(currNode);
+				}
+				
 				tracePhoton(sampler, hit.p, wiW2, power, bounces + 1);
 			}
 
@@ -198,6 +207,10 @@ struct PPMIntegrator : Integrator {
 		//create a new photon
 
 	}
+
+
+
+
 	v3f render(const Ray& ray, Sampler& sampler) const override {
 		v3f throughput(0.f);
 
@@ -242,8 +255,14 @@ struct PPMIntegrator : Integrator {
 				}
 			}
 
+		}	
+		
+		v3f direct = v3f(0.f);
+		if (!m_usePhotonsForDirect) {
+			direct = m_directIntegrator->render(ray, sampler);
 		}
-		return throughput;
+		
+		return direct +throughput;
 	}
 
 
