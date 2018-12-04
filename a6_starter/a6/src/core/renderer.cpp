@@ -49,7 +49,6 @@
 TR_NAMESPACE_BEGIN
 
 Renderer::Renderer(const Config& config) : scene(config) { }
-
 bool Renderer::init(const bool isRealTime, bool nogui) {
     realTime = isRealTime;
     this->nogui = nogui;
@@ -102,17 +101,20 @@ bool Renderer::init(const bool isRealTime, bool nogui) {
         else {
             throw std::runtime_error("Invalid integrator type");
         }
-
-        return integrator->init();
+		
+		return integrator->init();
     }
 }
 
 void Renderer::render() {
+	int progressive = 1;
+	int progressivePass = 3;
 	if (realTime) {
 		/**
 		 * Your real-time rendering loop solution from A1 here.
 		 */
 		SDL_Event e;
+		
 		for (;;) {
 			SDL_PollEvent(&e);
 			if (e.type == SDL_QUIT) {
@@ -125,55 +127,122 @@ void Renderer::render() {
 		}
 	}
 	else {
-		int width = scene.config.width;
-		int height = scene.config.height;
-		int sampleNum = scene.config.spp;
+		
+		if (progressive == 1) {
+			int width = scene.config.width;
+			int height = scene.config.height;
+			int sampleNum = scene.config.spp;
+			integrator->rgb->clear();
+			Sampler sampler = Sampler(260563769);
+			v3f o = scene.config.camera.o;
+			//1
+			float cameraPerspective = scene.config.camera.fov;
+			glm::mat4 inverseView = glm::lookAt(o, scene.config.camera.at, scene.config.camera.up);
+			float aspectRatio = (float)width / (float)height;
+			float scaling = tan((scene.config.camera.fov*deg2rad) / 2.f);
+			std::unique_ptr<v3f[]> dataBuffer = std::unique_ptr<v3f[]>(new v3f[width * height]);
+			for (int i = 0; i < progressivePass;i++){
+				//2
+				for (int x = 0; x < width; ++x) {
+					for (int y = 0; y < height; ++y) {
+						v3f colorSum = v3f(0.f, 0.f, 0.f);
+						if (sampleNum == 1) {
+							float xNDC = (x + 0.5) / width;
+							float yNDC = (y + 0.5) / height;
+							float xScreen = 2 * xNDC - 1;
+							float yScreen = 1 - 2 * yNDC;
+							float xCamera = xScreen * aspectRatio*scaling;
+							float yCamera = yScreen * scaling;
+							v4f P = v4f(xCamera, yCamera, -1.f, 1.f);
+							v4f pWorld = P * inverseView;
+							//v4f eyeTransformed = v4f(o[0],o[1],o[2],1.f)*inverseView;
+							Ray ray = Ray(o, v3f(pWorld));
+							
+							v3f color = integrator->render(ray, sampler);
+							dataBuffer[y*width + x] = color;
+						}
+						else {
+							for (int z = 0; z < sampleNum; z++) {
+								float xNDC = (x + sampler.next()) / width;
+								float yNDC = (y + sampler.next()) / height;
+								float xScreen = 2 * xNDC - 1;
+								float yScreen = 1 - 2 * yNDC;
+								float xCamera = xScreen * aspectRatio*scaling;
+								float yCamera = yScreen * scaling;
+								v4f P = v4f(xCamera, yCamera, -1.f, 1.f);
+								v4f pWorld = P * inverseView;
+								Ray ray = Ray(o, v3f(pWorld));
+								colorSum += integrator->render(ray, sampler);
+							}
+							dataBuffer[y*width + x] = colorSum / sampleNum/progressivePass;
+						}
 
-		Sampler sampler = Sampler(260563769);
-		v3f o = scene.config.camera.o;
-		//1
-		float cameraPerspective = scene.config.camera.fov;
-		glm::mat4 inverseView = glm::lookAt(o, scene.config.camera.at, scene.config.camera.up);
-		float aspectRatio = (float)width / (float)height;
-		float scaling = tan((scene.config.camera.fov*deg2rad) / 2.f);
-		//2
-		integrator->rgb->clear();
-
-		for (int x = 0; x < width; ++x) {
-			for (int y = 0; y < height; ++y) {
-				v3f colorSum = v3f(0.f, 0.f, 0.f);
-				if (sampleNum == 1) {
-					float xNDC = (x + 0.5) / width;
-					float yNDC = (y + 0.5) / height;
-					float xScreen = 2 * xNDC - 1;
-					float yScreen = 1 - 2 * yNDC;
-					float xCamera = xScreen * aspectRatio*scaling;
-					float yCamera = yScreen * scaling;
-					v4f P = v4f(xCamera, yCamera, -1.f, 1.f);
-					v4f pWorld = P * inverseView;
-					//v4f eyeTransformed = v4f(o[0],o[1],o[2],1.f)*inverseView;
-					Ray ray = Ray(o, v3f(pWorld));
-					v3f color = integrator->render(ray, sampler);
-					integrator->rgb->data[y*width + x] = color;
+					}
 				}
-				else {
-					for (int z = 0; z < sampleNum; z++) {
-						float xNDC = (x + sampler.next()) / width;
-						float yNDC = (y + sampler.next()) / height;
+				//radiusSqr = radiusSqr * (i + a) / (i + 1);
+				integrator = std::unique_ptr<PPMIntegrator>(new PPMIntegrator(scene));
+				integrator->init();
+			}
+			for (int x = 0; x < width; ++x) {
+				for (int y = 0; y < height; ++y) {
+					integrator->rgb->data[y*width + x] = dataBuffer[y*width + x];
+				}
+			}
+			
+		}
+		else {
+			int width = scene.config.width;
+			int height = scene.config.height;
+			int sampleNum = scene.config.spp;
+
+			Sampler sampler = Sampler(260563769);
+			v3f o = scene.config.camera.o;
+			//1
+			float cameraPerspective = scene.config.camera.fov;
+			glm::mat4 inverseView = glm::lookAt(o, scene.config.camera.at, scene.config.camera.up);
+			float aspectRatio = (float)width / (float)height;
+			float scaling = tan((scene.config.camera.fov*deg2rad) / 2.f);
+			//2
+			integrator->rgb->clear();
+
+			for (int x = 0; x < width; ++x) {
+				for (int y = 0; y < height; ++y) {
+					v3f colorSum = v3f(0.f, 0.f, 0.f);
+					if (sampleNum == 1) {
+						float xNDC = (x + 0.5) / width;
+						float yNDC = (y + 0.5) / height;
 						float xScreen = 2 * xNDC - 1;
 						float yScreen = 1 - 2 * yNDC;
 						float xCamera = xScreen * aspectRatio*scaling;
 						float yCamera = yScreen * scaling;
 						v4f P = v4f(xCamera, yCamera, -1.f, 1.f);
 						v4f pWorld = P * inverseView;
+						//v4f eyeTransformed = v4f(o[0],o[1],o[2],1.f)*inverseView;
 						Ray ray = Ray(o, v3f(pWorld));
-						colorSum += integrator->render(ray, sampler);
+						v3f color = integrator->render(ray, sampler);
+					
+						integrator->rgb->data[y*width + x] = color;
 					}
-					integrator->rgb->data[y*width + x] = colorSum / sampleNum;
-				}
+					else {
+						for (int z = 0; z < sampleNum; z++) {
+							float xNDC = (x + sampler.next()) / width;
+							float yNDC = (y + sampler.next()) / height;
+							float xScreen = 2 * xNDC - 1;
+							float yScreen = 1 - 2 * yNDC;
+							float xCamera = xScreen * aspectRatio*scaling;
+							float yCamera = yScreen * scaling;
+							v4f P = v4f(xCamera, yCamera, -1.f, 1.f);
+							v4f pWorld = P * inverseView;
+							Ray ray = Ray(o, v3f(pWorld));
+							colorSum += integrator->render(ray, sampler);
+						}
+						integrator->rgb->data[y*width + x] = colorSum / sampleNum;
+					}
 
+				}
 			}
 		}
+
 
 
 	}

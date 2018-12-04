@@ -48,7 +48,8 @@ struct PPMIntegrator : Integrator {
 	int m_nbPhotonsSearch;
 	bool m_useFinalGather;
 	int m_nbFinalGather;
-
+	float m_radiusSqr;
+	int randomSeed = 265;
 	std::unique_ptr<DirectIntegrator> m_directIntegrator;
 
 	explicit PPMIntegrator(const Scene& scene) : Integrator(scene)
@@ -58,7 +59,7 @@ struct PPMIntegrator : Integrator {
 		m_directIntegrator->m_emitterSamples = scene.config.integratorSettings.pm.emitterSamplesCount;
 		m_directIntegrator->m_bsdfSamples = scene.config.integratorSettings.pm.emitterSamplesCount;
 		m_directIntegrator->m_samplingStrategy = "mis";
-
+		// = 0;
 		//1st pass
 		m_photonCount = scene.config.integratorSettings.pm.photonCount;
 		m_photonRrDepth = scene.config.integratorSettings.pm.photonRrDepth;
@@ -72,11 +73,42 @@ struct PPMIntegrator : Integrator {
 		m_usePhotonsForDirect = scene.config.integratorSettings.pm.usePhotonsForDirect;
 		
 	}
-
+	float radiusCalculator() {
+		static int iter = 0;
+		static float radiusSqr = m_radiusSearch*m_radiusSearch;
+		
+		float factor;
+		if (iter == 0) {
+			factor = 1.f;
+		}
+		else {
+			factor = (((2.f / 3.f) + (float)(iter-1.f)) / (1.f + (float)(iter-1.f)));
+		}
+		
+		radiusSqr = radiusSqr * factor;
+		iter++;
+		return radiusSqr;
+	}
+	float randomSeedCalculator() {
+		static int iter = 1;
+		static int raseed = 51;
+		raseed*=iter;
+		iter++;
+		return raseed;
+	}
 	bool init() override {
 		Integrator::init();
-
+		//m_radiusSearch = iter / 10;
+		//iter++;
+		m_radiusSqr = radiusCalculator();
+		randomSeed = randomSeedCalculator();
+		std::vector<Photon>().swap(m_photonMap);
+		m_photonMap.clear();
+		m_KDTree.clear();
+		printf("\nradius square: %f , rew random seed: %d\n",m_radiusSqr,randomSeed);
 		std::cout << "Start emitting photons. " << std::endl;
+		
+
 		generatePhotonMap();
 		printf("first bounce hit:%d", firstBH);
 		return true;
@@ -86,8 +118,7 @@ struct PPMIntegrator : Integrator {
 	void generatePhotonMap() {
 		// TODO: Implement this
 		float totalLightArea = 0.f;
-		Sampler sampler = Sampler(260563769);
-
+		Sampler sampler = Sampler(randomSeed);
 		for (unsigned int i = 0; i < scene.emitters.size(); i++) {
 			const Emitter& em = scene.emitters[i];
 			totalLightArea += em.area;
@@ -224,7 +255,9 @@ struct PPMIntegrator : Integrator {
 			}
 			//see if ray intersects geometry
 			//if it does, go a closest neighbor search
-			float radius = m_radiusSearch * m_radiusSearch;
+			
+			float radius = m_radiusSqr;
+			//printf("\n radius %f\n", radius);
 			const double num_photons = m_nbPhotonsSearch;
 
 			PointKDTree<PhotonKDTreeNode>::SearchResult results[501];
@@ -249,7 +282,7 @@ struct PPMIntegrator : Integrator {
 
 				double dot = glm::dot(photon.dir, (hit.frameNs.n));
 				//double lum = (photon.power.x*0.299 + photon.power.y*0.587 + photon.power.z*0.114);
-				if (dot < 0 && n > 8) { //approximately in the same direction. Photon is on the same surface
+				if (dot < 0 && n > 2) { //approximately in the same direction. Photon is on the same surface
 					throughput += brdf_factor * photon.power*INV_PI / radius;
 
 				}
