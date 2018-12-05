@@ -48,7 +48,8 @@ struct PPMIntegrator : Integrator {
 	int m_nbPhotonsSearch;
 	bool m_useFinalGather;
 	int m_nbFinalGather;
-
+	float m_radiusSqr;
+	int randomSeed = 265;
 	std::unique_ptr<DirectIntegrator> m_directIntegrator;
 
 	explicit PPMIntegrator(const Scene& scene) : Integrator(scene)
@@ -58,7 +59,7 @@ struct PPMIntegrator : Integrator {
 		m_directIntegrator->m_emitterSamples = scene.config.integratorSettings.pm.emitterSamplesCount;
 		m_directIntegrator->m_bsdfSamples = scene.config.integratorSettings.pm.emitterSamplesCount;
 		m_directIntegrator->m_samplingStrategy = "mis";
-
+		// = 0;
 		//1st pass
 		m_photonCount = scene.config.integratorSettings.pm.photonCount;
 		m_photonRrDepth = scene.config.integratorSettings.pm.photonRrDepth;
@@ -70,14 +71,48 @@ struct PPMIntegrator : Integrator {
 		m_useFinalGather = scene.config.integratorSettings.pm.useFinalGather;
 		m_nbFinalGather = scene.config.integratorSettings.pm.finalGatherSamplesCount;
 		m_usePhotonsForDirect = scene.config.integratorSettings.pm.usePhotonsForDirect;
+		
 	}
-
+	float radiusCalculator() {
+		static int iter = 0;
+		static float radiusSqr = m_radiusSearch*m_radiusSearch;
+		
+		float factor;
+		if (iter == 0) {
+			factor = 1.f;
+		}
+		else {
+			factor = (((2.f / 3.f) + (float)(iter-1.f)) / (1.f + (float)(iter-1.f)));
+		}
+		
+		radiusSqr = radiusSqr * factor;
+		iter++;
+		return radiusSqr;
+	}
+	float randomSeedCalculator() {
+		static int iter = 1;
+		static int raseed = 51;
+		raseed+=iter;
+		iter++;
+		return raseed;
+	}
 	bool init() override {
 		Integrator::init();
+		//m_radiusSearch = iter / 10;
+		//iter++;
+		m_radiusSqr = radiusCalculator();
+		randomSeed = randomSeedCalculator();
+		std::vector<Photon>().swap(m_photonMap);
+		m_photonMap.clear();
+		m_photonMap.shrink_to_fit();
+		m_KDTree.clear();
+		
 
+		printf("\nradius square: %f , new random seed: %d\n",m_radiusSqr,randomSeed);
 		std::cout << "Start emitting photons. " << std::endl;
+		
+
 		generatePhotonMap();
-		printf("first bounce hit:%d", firstBH);
 		return true;
 	}
 	bool haveEnoughPhotons = false;
@@ -85,26 +120,22 @@ struct PPMIntegrator : Integrator {
 	void generatePhotonMap() {
 		// TODO: Implement this
 		float totalLightArea = 0.f;
-		Sampler sampler = Sampler(260563769);
-
+		Sampler sampler = Sampler(randomSeed);
 		for (unsigned int i = 0; i < scene.emitters.size(); i++) {
 			const Emitter& em = scene.emitters[i];
 			totalLightArea += em.area;
 		}
-		/* loop through all lights
-		for (int i = 0; i < scene.emitters.size(); i++) {
-			const Emitter& em = scene.emitters[i];
-			float lightArea = em.area;
-			int emitterPhotonNum = (int)ceil(m_photonCount*lightArea / totalLightArea);
-			//initial energy
-			v3f energy = lightArea / double(emitterPhotonNum)*em.getPower();
-			for (int j = 0; j <= emitterPhotonNum; j++) {
-			}
-		}
-		*/
 		//randomly select light
 		int emittedPhotons = 0;
-
+		try {
+			m_photonMap.reserve(m_photonCount);
+			m_KDTree.reserve(m_photonCount);
+		}
+		catch (const std::bad_alloc& e) {
+			std::cout << "Allocation failed: " << e.what() << '\n';
+		}
+		m_photonMap.reserve(m_photonCount);
+		m_KDTree.reserve(m_photonCount);
 		while (!haveEnoughPhotons) {
 			float emPdf;
 			size_t id = selectEmitter(sampler.next(), emPdf);
@@ -126,6 +157,7 @@ struct PPMIntegrator : Integrator {
 		for (int i = 0; i < m_photonMap.size(); i++) {
 			m_photonMap[i].power = m_photonMap[i].power / emittedPhotons;
 		}
+	
 		m_KDTree.build();
 
 	}
@@ -143,7 +175,7 @@ struct PPMIntegrator : Integrator {
 		}
 
 	}
-	int firstBH = 0;
+
 	void tracePhoton(Sampler& sampler, const v3f& pos, const v3f& dir, const v3f& energy, int bounces) {
 
 		float rrProb = 1.f;
@@ -168,9 +200,6 @@ struct PPMIntegrator : Integrator {
 		Ray ray = Ray(pos, dir);
 		SurfaceInteraction hit;
 		if (scene.bvh->intersect(ray, hit)) {
-			if (bounces == 0) {
-				firstBH += 1;
-			}
 			v3f emission = getEmission(hit);
 			//if not hitting emitter
 			if (emission == v3f(0.f)) {//also determine whether surface is diffuse, but how?
@@ -189,8 +218,15 @@ struct PPMIntegrator : Integrator {
 				v3f power = energy * brdf* glm::abs(glm::dot(normal, normalize(wiW2))) / rrProb;
 				PhotonMapIdx curr = m_photonMap.size();
 				const PhotonKDTreeNode currNode = PhotonKDTreeNode(p.pos, curr);
-				m_photonMap.push_back(p);
-				m_KDTree.push_back(currNode);
+				if (m_usePhotonsForDirect||m_useFinalGather) {
+					m_photonMap.push_back(p);
+					m_KDTree.push_back(currNode);
+				}
+				else if(bounces > 0) {
+					m_photonMap.push_back(p);
+					m_KDTree.push_back(currNode);
+				}
+				
 				tracePhoton(sampler, hit.p, wiW2, power, bounces + 1);
 			}
 
@@ -198,9 +234,13 @@ struct PPMIntegrator : Integrator {
 		//create a new photon
 
 	}
+
+
+
+
 	v3f render(const Ray& ray, Sampler& sampler) const override {
 		v3f throughput(0.f);
-
+		v3f direct = v3f(0.f);
 		SurfaceInteraction hit;
 
 		if (scene.bvh->intersect(ray, hit)) {
@@ -211,39 +251,85 @@ struct PPMIntegrator : Integrator {
 			}
 			//see if ray intersects geometry
 			//if it does, go a closest neighbor search
-			float radius = m_radiusSearch * m_radiusSearch;
-			const double num_photons = m_nbPhotonsSearch;
+			
+			float radius = m_radiusSqr;
+			if (m_useFinalGather) {
+				direct = m_directIntegrator->render(ray, sampler);
+				
+				for (int j = 0; j < m_nbFinalGather; j++) {
+					float bsdfSamplePdf;
+					SurfaceInteraction indirectHit;
+					v3f brdfDirect =  getBSDF(hit)->sample(hit, sampler.next2D(), &bsdfSamplePdf);
+					v3f wiW = glm::normalize(hit.frameNs.toWorld(hit.wi));
+					
+					Ray indRay = Ray(hit.p, wiW);
+					if (scene.bvh->intersect(indRay, indirectHit)) {
+						const double num_photons = m_nbPhotonsSearch;
+						PointKDTree<PhotonKDTreeNode>::SearchResult results[501];
+						size_t n = m_KDTree.nnSearch(indirectHit.p, radius, m_nbPhotonsSearch, results);
+						
+						for (int i = 0; i < n; i++) {
 
-			PointKDTree<PhotonKDTreeNode>::SearchResult results[501];
+							PointKDTree<PhotonKDTreeNode>::SearchResult result = results[i];
+							//find the photons in the photon map;
+							Photon photon = m_photonMap[m_KDTree[result.index].data];
+							//add the contribution of the photon to the throughput
+							//get the direction from hit point to photon
+							indirectHit.wi = glm::normalize(indirectHit.frameNs.toLocal(-photon.dir));
+							indirectHit.wo = glm::normalize(indirectHit.frameNs.toLocal(-wiW));
+							
+							const BSDF* brdf = getBSDF(indirectHit);
 
-			size_t n = m_KDTree.nnSearch(hit.p, radius, m_nbPhotonsSearch, results);
+							// brdf_factor
+							v3f brdf_factor = brdf->eval(indirectHit);
 
-			for (int i = 0; i < n; i++) {
+							double dot = glm::dot(photon.dir, (indirectHit.frameNs.n));
+							if (dot < 0 && n > 2) { //approximately in the same direction. Photon is on the same surface
+								throughput += brdfDirect * brdf_factor * photon.power*INV_PI / radius / m_nbFinalGather * Frame::cosTheta(hit.wi);
 
-				PointKDTree<PhotonKDTreeNode>::SearchResult result = results[i];
-				//find the photons in the photon map;
-
-				Photon photon = m_photonMap[m_KDTree[result.index].data];
-				//add the contribution of the photon to the throughput
-				//get the direction from hit point to photon
-				hit.wi = glm::normalize(hit.frameNs.toLocal(-photon.dir));
-				hit.wo = glm::normalize(hit.frameNs.toLocal(-ray.d));
-				//hit.p = photon.pos;
-				const BSDF* brdf = getBSDF(hit);
-
-				// brdf_factor
-				v3f brdf_factor = brdf->eval(hit);
-
-				double dot = glm::dot(photon.dir, (hit.frameNs.n));
-				//double lum = (photon.power.x*0.299 + photon.power.y*0.587 + photon.power.z*0.114);
-				if (dot < 0 && n > 8) { //approximately in the same direction. Photon is on the same surface
-					throughput += brdf_factor * photon.power*INV_PI / radius;
-
+							}
+						}
+					}
 				}
 			}
+			else {
+				const double num_photons = m_nbPhotonsSearch;
+				PointKDTree<PhotonKDTreeNode>::SearchResult results[501];
+				size_t n = m_KDTree.nnSearch(hit.p, radius, m_nbPhotonsSearch, results);
+				if (!m_usePhotonsForDirect) {
+					direct = m_directIntegrator->render(ray, sampler);
+				}
+				for (int i = 0; i < n; i++) {
 
-		}
-		return throughput;
+					PointKDTree<PhotonKDTreeNode>::SearchResult result = results[i];
+					//find the photons in the photon map;
+
+					Photon photon = m_photonMap[m_KDTree[result.index].data];
+					//add the contribution of the photon to the throughput
+					//get the direction from hit point to photon
+					hit.wi = glm::normalize(hit.frameNs.toLocal(-photon.dir));
+					hit.wo = glm::normalize(hit.frameNs.toLocal(-ray.d));
+					//hit.p = photon.pos;
+					const BSDF* brdf = getBSDF(hit);
+
+					// brdf_factor
+					v3f brdf_factor = brdf->eval(hit);
+
+					double dot = glm::dot(photon.dir, (hit.frameNs.n));
+					if (dot < 0 && n > 2) { //approximately in the same direction. Photon is on the same surface
+						throughput += brdf_factor * photon.power*INV_PI / radius;
+
+					}
+				}
+			}
+			
+
+		}	
+		
+		
+		
+		
+		return throughput +direct;
 	}
 
 

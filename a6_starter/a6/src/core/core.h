@@ -564,7 +564,7 @@ struct BitmapTexture3f : Texture<v3f> {
             s = glm::max(s, v3f(texturePtr->cs[i * 3 + 0], texturePtr->cs[i * 3 + 1], texturePtr->cs[i * 3 + 2]));
         return s;
     }
-
+	//float radiusSqr = scene.config.integratorSettings.pm.searchRadius*scene.config.integratorSettings.pm.searchRadius;
     v3f eval(const WorldData& s, const SurfaceInteraction& hit) const override {
         const tinyobj::shape_t& shape = s.shapes[hit.shapeID];
 

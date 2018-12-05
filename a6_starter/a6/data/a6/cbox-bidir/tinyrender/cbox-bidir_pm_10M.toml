@@ -16,7 +16,7 @@ realtime = false
 type = "photon"
 spp = 1
 
-photonCount = 10000000
+photonCount = 100000
 searchRadius = 0.03
 photonsSearchCount = 500
 useFinalGather = false
