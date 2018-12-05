@@ -1,0 +1,26 @@
+{
+  "firstlast": "GrantZhao and Otman Benchekroun",
+  "id": 5,
+  "course": 546,
+  "assignment": 6,
+  "renders": [
+    { "scene": "Photon Mapping with 100K photons",
+      "render": "offline/cbox-bidir_pm_100K.exr"
+    },
+    { "scene": "Photon Mapping with 1M photons",
+      "render": "offline/cbox-bidir_pm_1M.exr"
+    },
+    { "scene": "Photon Mapping with 10M photons",
+      "render": "offline/cbox-bidir_pm_10M.exr"
+    },
+    { "scene": "Photon Mapping with direct",
+      "render": "offline/cbox-bidir_pm_direct.exr"
+    },
+    { "scene": "Photon Mapping with final gathering",
+      "render": "offline/cbox-bidir_pm_fg.exr"
+    },
+	{ "scene": "Progressive Photon Mapping",
+      "render": "offline/cbox-bidir_pm_1M_progressive.exr"
+    }
+  ]
+}

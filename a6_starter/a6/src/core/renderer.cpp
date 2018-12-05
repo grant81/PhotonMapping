@@ -107,8 +107,8 @@ bool Renderer::init(const bool isRealTime, bool nogui) {
 }
 
 void Renderer::render() {
-	int progressive = 1;
-	int progressivePass = 3;
+	int progressive = 0;
+	int progressivePass = 5;
 	if (realTime) {
 		/**
 		 * Your real-time rendering loop solution from A1 here.
@@ -141,8 +141,15 @@ void Renderer::render() {
 			float aspectRatio = (float)width / (float)height;
 			float scaling = tan((scene.config.camera.fov*deg2rad) / 2.f);
 			std::unique_ptr<v3f[]> dataBuffer = std::unique_ptr<v3f[]>(new v3f[width * height]);
+			
 			for (int i = 0; i < progressivePass;i++){
 				//2
+				
+				if (i != 0) {
+					integrator = std::unique_ptr<PPMIntegrator>(new PPMIntegrator(scene));
+					integrator->init();
+				}
+				
 				for (int x = 0; x < width; ++x) {
 					for (int y = 0; y < height; ++y) {
 						v3f colorSum = v3f(0.f, 0.f, 0.f);
@@ -159,7 +166,7 @@ void Renderer::render() {
 							Ray ray = Ray(o, v3f(pWorld));
 							
 							v3f color = integrator->render(ray, sampler);
-							dataBuffer[y*width + x] = color;
+							dataBuffer[y*width + x] += color/progressivePass;
 						}
 						else {
 							for (int z = 0; z < sampleNum; z++) {
@@ -174,14 +181,12 @@ void Renderer::render() {
 								Ray ray = Ray(o, v3f(pWorld));
 								colorSum += integrator->render(ray, sampler);
 							}
-							dataBuffer[y*width + x] = colorSum / sampleNum/progressivePass;
+							dataBuffer[y*width + x] += colorSum / sampleNum / progressivePass;
 						}
 
 					}
 				}
-				//radiusSqr = radiusSqr * (i + a) / (i + 1);
-				integrator = std::unique_ptr<PPMIntegrator>(new PPMIntegrator(scene));
-				integrator->init();
+				
 			}
 			for (int x = 0; x < width; ++x) {
 				for (int y = 0; y < height; ++y) {
